@@ -1,18 +1,73 @@
 import streamlit as st
 import cv2
 import numpy as np
+import requests
+import tempfile
 
-st.title("Microsphere Detection & Diameter Measurement")
+# ==============================================================================
+# CONFIG
+# ==============================================================================
+
+API_KEY = "H7vGKbWcGLGBtLqLHCDNWeSf"
+BG_REMOVED_IMAGE = "no_bg.png"
 
 # ==============================================================================
 # CALIBRATION CONSTANTS
 # ==============================================================================
+
 MAGNIFICATION = 2.0
 BASE_MICRONS_PER_PIXEL = 7.5
 MICRONS_PER_PIXEL = BASE_MICRONS_PER_PIXEL / MAGNIFICATION
 
 
+# ==============================================================================
+# BACKGROUND REMOVAL
+# ==============================================================================
+
+def remove_background(image_path):
+
+    try:
+        with open(image_path, 'rb') as img_file:
+
+            response = requests.post(
+                'https://api.remove.bg/v1.0/removebg',
+                files={'image_file': img_file},
+                data={'size': 'auto'},
+                headers={'X-Api-Key': API_KEY},
+                timeout=30
+            )
+
+        if response.status_code == requests.codes.ok:
+
+            with open(BG_REMOVED_IMAGE, 'wb') as out:
+                out.write(response.content)
+
+            st.success("✓ Background removed successfully")
+            return BG_REMOVED_IMAGE
+
+        elif response.status_code == 402:
+            st.warning("⚠ API quota exceeded. Using original image.")
+            return image_path
+
+        elif response.status_code == 403:
+            st.warning("⚠ Invalid API key. Using original image.")
+            return image_path
+
+        else:
+            st.warning(f"⚠ remove.bg error {response.status_code}")
+            return image_path
+
+    except requests.exceptions.RequestException as e:
+        st.warning("⚠ Network/API error. Using original image.")
+        return image_path
+
+
+# ==============================================================================
+# SPHERE VALIDATION FUNCTIONS
+# ==============================================================================
+
 def calculate_circularity(mask, x, y, r):
+
     h, w = mask.shape
     if x - r < 0 or x + r >= w or y - r < 0 or y + r >= h:
         return 0
@@ -39,17 +94,17 @@ def calculate_intensity_uniformity(gray, x, y, r):
     mask = np.zeros(roi.shape, dtype=np.uint8)
     cv2.circle(mask, (r, r), r, 255, -1)
 
-    pixels = roi[mask > 0]
+    masked_pixels = roi[mask > 0]
 
-    if len(pixels) == 0:
+    if len(masked_pixels) == 0:
         return 0
 
-    std = np.std(pixels)
-    mean = np.mean(pixels)
+    std = np.std(masked_pixels)
+    mean = np.mean(masked_pixels)
 
-    cv_val = std / mean if mean > 0 else 1
+    cv_val = std / mean if mean > 0 else 1.0
 
-    return 1 - min(cv_val, 1)
+    return 1.0 - min(cv_val, 1.0)
 
 
 def validate_sphere(gray, mask, x, y, r):
@@ -60,14 +115,14 @@ def validate_sphere(gray, mask, x, y, r):
 
     if circularity > 0.60:
         score += 3
-    elif circularity > 0.50:
+    elif circularity > 0.45:
         score += 1
 
     uniformity = calculate_intensity_uniformity(gray, x, y, r)
 
     if uniformity > 0.70:
         score += 3
-    elif uniformity > 0.50:
+    elif uniformity > 0.45:
         score += 1
 
     if r > 120:
@@ -76,20 +131,28 @@ def validate_sphere(gray, mask, x, y, r):
     h, w = gray.shape
 
     if 0 <= x < w and 0 <= y < h:
-        center_intensity = gray[y, x]
 
-        if center_intensity > 140:
-            score += 2
-        elif center_intensity > 90:
-            score += 1
+        y_start, y_end = max(0, y - 2), min(h, y + 3)
+        x_start, x_end = max(0, x - 2), min(w, x + 3)
 
-    return score >= 2
+        center_patch = gray[y_start:y_end, x_start:x_end]
+
+        if center_patch.size > 0:
+
+            center_intensity = np.max(center_patch)
+
+            if center_intensity > 130:
+                score += 2
+            elif center_intensity > 80:
+                score += 1
+
+    return score >= 2, score
 
 
 def detect_overlapping_circles(circles):
 
     if circles is None or len(circles) == 0:
-        return None
+        return []
 
     circles_list = circles[0].tolist()
 
@@ -100,7 +163,6 @@ def detect_overlapping_circles(circles):
     for c1 in circles_list:
 
         x1, y1, r1 = c1
-
         duplicate = False
 
         for c2 in keep:
@@ -123,35 +185,42 @@ def detect_overlapping_circles(circles):
 # STREAMLIT UI
 # ==============================================================================
 
-uploaded = st.file_uploader("Upload Microsphere Image", type=["png","jpg","jpeg"])
+st.title("Microsphere Detection with Background Removal")
 
-if uploaded is not None:
+uploaded_file = st.file_uploader("Upload Microsphere Image", type=["png","jpg","jpeg"])
 
-    file_bytes = np.asarray(bytearray(uploaded.read()), dtype=np.uint8)
+if uploaded_file is not None:
 
-    img = cv2.imdecode(file_bytes, 1)
+    # Save uploaded file temporarily
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    temp_file.write(uploaded_file.read())
+    temp_path = temp_file.name
 
-    st.image(img, caption="Original Image", channels="BGR")
+    st.image(temp_path, caption="Uploaded Image", width="stretch")
+
+    # Step 1: Remove background
+    processed_image_path = remove_background(temp_path)
+
+    # Step 2: Load image
+    img = cv2.imread(processed_image_path)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+    final_output = np.zeros_like(img)
+
+    # Step 3: Preprocessing
     blur = cv2.GaussianBlur(gray, (7,7), 1.5)
 
     _, thresh = cv2.threshold(
-        blur, 0, 255,
-        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+        blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
 
     kernel = np.ones((5,5), np.uint8)
 
-    opening = cv2.morphologyEx(
-        thresh, cv2.MORPH_OPEN, kernel, iterations=2
-    )
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+    opening = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-    opening = cv2.morphologyEx(
-        opening, cv2.MORPH_CLOSE, kernel, iterations=1
-    )
-
+    # Step 4: Circle Detection
     circles = cv2.HoughCircles(
         blur,
         cv2.HOUGH_GRADIENT,
@@ -163,15 +232,14 @@ if uploaded is not None:
         maxRadius=75
     )
 
-    st.write("Initial detections:",
-             len(circles[0]) if circles is not None else 0)
+    st.write("Initial detections:", len(circles[0]) if circles is not None else 0)
 
     if circles is not None:
         circles = detect_overlapping_circles(circles)
 
-        st.write("After NMS:",
-                 len(circles[0]) if circles is not None else 0)
+    st.write("After overlap merging:", len(circles[0]) if circles is not None else 0)
 
+    # Step 5: Validation
     validated = []
 
     if circles is not None:
@@ -180,13 +248,14 @@ if uploaded is not None:
 
             x,y,r = int(x), int(y), int(r)
 
-            if validate_sphere(gray, opening, x, y, r):
+            is_valid, score = validate_sphere(gray, opening, x, y, r)
+
+            if is_valid:
                 validated.append((x,y,r))
 
     st.write("Final validated spheres:", len(validated))
 
-    final_output = np.zeros_like(img)
-
+    # Step 6: Draw Results
     for (x,y,r) in validated:
 
         mask = np.zeros(gray.shape, np.uint8)
@@ -204,19 +273,15 @@ if uploaded is not None:
 
         cv2.circle(final_output, (x,y), r, (0,255,0), 2)
 
-        cv2.line(final_output,
-                 (x-r,y),
-                 (x+r,y),
-                 (0,0,255),2)
+        cv2.line(final_output, (x-r,y), (x+r,y), (0,0,255), 2)
 
-        cv2.putText(
-            final_output,
-            label,
-            (x-25, y-8),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0,255,0),
-            1
-        )
+        cv2.putText(final_output, label,
+                    (x-25,y-8),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0,255,0),
+                    1)
 
-    st.image(final_output, caption="Detected Microspheres", channels="BGR")
+    st.image(final_output, caption="Detected Microspheres", channels="BGR", width="stretch")
+
+    st.success("Processing complete")
