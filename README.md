@@ -1,2 +1,2 @@
 # Microsphere
-Ability to detect microspheres and check their radius automatically
+Ability to detect microspheres and check their diameter automatically
