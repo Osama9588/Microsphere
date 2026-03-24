@@ -16,7 +16,7 @@ BG_REMOVED_IMAGE = "no_bg.png"
 # ==============================================================================
 
 MAGNIFICATION = 2.0
-BASE_MICRONS_PER_PIXEL = 7.5
+BASE_MICRONS_PER_PIXEL = 22.5
 MICRONS_PER_PIXEL = BASE_MICRONS_PER_PIXEL / MAGNIFICATION
 
 
@@ -269,8 +269,9 @@ if uploaded_file is not None:
         diameter_px = 2*r
         diameter_um = diameter_px * MICRONS_PER_PIXEL
 
-        label = f"{diameter_um:.0f} um"
-
+        # label = f"{diameter_um:.0f} um"
+        label = f"{diameter_um:.2f} um"
+        
         cv2.circle(final_output, (x,y), r, (0,255,0), 2)
 
         cv2.line(final_output, (x-r,y), (x+r,y), (0,0,255), 2)
