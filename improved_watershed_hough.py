@@ -279,7 +279,7 @@ if uploaded_file is not None:
         cv2.putText(final_output, label,
                     (x-25,y-8),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
+                    0.4,
                     (0,0,255),
                     1)
 
