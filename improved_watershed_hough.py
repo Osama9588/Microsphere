@@ -280,7 +280,7 @@ if uploaded_file is not None:
                     (x-25,y-8),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
-                    (0,255,0),
+                    (0,0,255),
                     1)
 
     st.image(final_output, caption="Detected Microspheres", channels="BGR", width="stretch")
