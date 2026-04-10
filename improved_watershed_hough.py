@@ -255,6 +255,11 @@ if uploaded_file is not None:
 
     st.write("Final validated spheres:", len(validated))
 
+    line_option = st.radio(
+        "Select diameter orientation:",
+        ["Vertical", "Horizontal"]
+)
+
     # Step 6: Draw Results
     for (x,y,r) in validated:
 
@@ -275,7 +280,11 @@ if uploaded_file is not None:
         cv2.circle(final_output, (x,y), r, (0,255,0), 2)
 
         # cv2.line(final_output, (x-r,y), (x+r,y), (0,0,255), 2)
-        cv2.line(final_output, (x, y-r), (x, y+r), (0,0,255), 2)
+        # cv2.line(final_output, (x, y-r), (x, y+r), (0,0,255), 2)
+        if line_option == "Horizontal":
+            cv2.line(final_output, (x-r, y), (x+r, y), (0,0,255), 2)
+        else:  # Vertical
+            cv2.line(final_output, (x, y-r), (x, y+r), (0,0,255), 2)
 
         cv2.putText(final_output, label,
                     (x-25,y-8),
