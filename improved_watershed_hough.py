@@ -274,7 +274,8 @@ if uploaded_file is not None:
         
         cv2.circle(final_output, (x,y), r, (0,255,0), 2)
 
-        cv2.line(final_output, (x-r,y), (x+r,y), (0,0,255), 2)
+        # cv2.line(final_output, (x-r,y), (x+r,y), (0,0,255), 2)
+        cv2.line(final_output, (x, y-r), (x, y+r), (0,0,255), 2)
 
         cv2.putText(final_output, label,
                     (x-25,y-8),
