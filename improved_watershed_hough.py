@@ -16,7 +16,7 @@ BG_REMOVED_IMAGE = "no_bg.png"
 # ==============================================================================
 
 MAGNIFICATION = 2.0
-BASE_MICRONS_PER_PIXEL = 23
+BASE_MICRONS_PER_PIXEL = 22.5
 MICRONS_PER_PIXEL = BASE_MICRONS_PER_PIXEL / MAGNIFICATION
 
 
