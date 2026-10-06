@@ -8,7 +8,7 @@ import tempfile
 # CONFIG
 # ==============================================================================
 
-API_KEY = "H7vGKbWcGLGBtLqLHCDNWeSf"
+API_KEY = "your_api_key"
 BG_REMOVED_IMAGE = "no_bg.png"
 
 # ==============================================================================
